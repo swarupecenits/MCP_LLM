@@ -1,0 +1,11 @@
+{
+  "extends": "@mlworkspace/tsconfig-preset",
+  "include": ["src"],
+  "exclude": ["node_modules", "build", "dist", "example"],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "./build",
+    "module": "commonjs",
+    "target": "es6"
+  }
+}

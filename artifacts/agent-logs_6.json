@@ -1,0 +1,5 @@
+{
+  "user_task": "\n1. Navigate to ai.azure.com.\n2. Search for Model Catalogue.\n3. See if the Azure OpenAI Model Catalogue is available.\n3. Close the browser.\n",
+  "generated_script": "import { test, expect } from '@playwright/test';\n\ntest('Navigate to Azure AI Foundry and check Model Catalogue', async ({ page }) => {\n  // Navigate to Azure AI Foundry\n  await page.goto('https://ai.azure.com', { waitUntil: 'networkidle' });\n\n  // Verify page title\n  await expect(page).toHaveTitle(/Azure AI Foundry/);\n\n  // Click on \"Go to full model catalog\"\n  const modelCatalogLink = page.getByRole('link', { name: 'Go to full model catalog' });\n  await expect(modelCatalogLink).toBeVisible({ timeout: 10000 });\n  await modelCatalogLink.click();\n\n  // Verify navigation to Model Catalogue page\n  await expect(page).toHaveURL(/\\/explore\\/models/);\n  await expect(page).toHaveTitle(/Model catalog - Azure AI Foundry/);\n\n  // Close the browser\n  await page.close();\n});",
+  "status": "success"
+}

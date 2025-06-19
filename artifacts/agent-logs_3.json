@@ -1,0 +1,5 @@
+{
+  "user_task": "\n1. Navigate to Google.com.\n2. Search for the book named alchemist.\n3. See if the book name is visible in the search results.\n3. Close the browser.\n",
+  "generated_script": "import { test, expect } from '@playwright/test';\n\ntest('search_alchemist_google', async ({ page }) => {\n  // Step 1: Navigate to Google.com\n  await page.goto('https://www.google.com', { waitUntil: 'networkidle' });\n\n  // Step 2: Search for the book named 'alchemist'\n  const searchBox = page.getByRole('combobox', { name: 'Search' });\n  await searchBox.fill('alchemist');\n  await searchBox.press('Enter');\n\n  // Step 3: Verify the book name 'The Alchemist' is visible in the search results\n  const bookName = page.getByText('The Alchemist');\n  await expect(bookName).toBeVisible({ timeout: 10000 });\n\n  // Step 4: Close the browser\n  await page.close();\n});",
+  "status": "success"
+}

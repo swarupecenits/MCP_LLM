@@ -1,0 +1,3 @@
+{
+  "extends": "@mlworkspace/eslint-config-preset"
+}

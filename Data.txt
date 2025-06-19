@@ -1,0 +1,109 @@
+- script: |
+    cd playwright_project
+    npx playwright test --reporter=json --trace on > ../results.json
+    cp tests/trace.zip ../trace.zip
+  displayName: "Run Failing Test with JSON Reporter and Trace"
+  continueOnError: true
+
+- task: AzureCLI@2
+  displayName: "Run Test Generation Script Azure OpenAI"
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: "bash"
+    scriptLocation: "inlineScript"
+    inlineScript: |
+      python scripts/e2e-test-generator/agent_v3.py "$(cat pr_description.txt)"
+    addSpnToEnvironment: true
+  env:
+    AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+    AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+
+
+************************************************************************************
+
+
+- script: |
+    cd playwright_project
+    npx playwright test --reporter=json --trace on > results.json
+    cp test-results/*.zip ../trace.zip
+  displayName: "Run Failing Test with JSON Reporter and Trace"
+  continueOnError: true
+
+- task: AzureCLI@2
+  displayName: "Run Test Generation Script Azure OpenAI"
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: "bash"
+    scriptLocation: "inlineScript"
+    inlineScript: |
+      python scripts/e2e-test-generator/self_heal_v2.py --task "Navigate to Azure AI Foundry Language Playground; Verify playground is accessible" --results results.json
+    addSpnToEnvironment: true
+  env:
+    AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+    AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+
+************************************************************************************
+
+python self_heal_v2.py --task "Your test steps here" --results results.json
+
+************************************************************************************
+
+ npx playwright test ai-foundry-language-playground.spec.ts  --reporter=json --trace on > results.json
+
+
+**********************************************************************************
+
+# ... (Previous tasks, including Playwright test execution) ...
+
+          - script: |
+              python scripts/e2e-test-generator/parse_errors.py
+            displayName: "Generate Error Details File"
+            workingDirectory: $(Build.SourcesDirectory) # Ensure script runs from repo root where test-results is
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(Build.SourcesDirectory)/error_details.md' # Adjust if using .txt
+              artifactName: 'TestFailureDetails'
+              publishLocation: 'Container'
+            displayName: 'Publish Test Failure Details Artifact'
+            condition: failed() # Only publish if previous tasks failed, or always() if you want it always
+
+
+*************************************************************************************
+
+- script: |
+    cd playwright_project
+    npx playwright test --reporter=json --trace on > results.json
+    cp test-results/*.zip ../trace.zip
+  displayName: "Run Failing Test with JSON Reporter and Trace"
+  continueOnError: true
+
+- task: AzureCLI@2
+  displayName: "Run Test Generation Script Azure OpenAI"
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: "bash"
+    scriptLocation: "inlineScript"
+    inlineScript: |
+      python scripts/e2e-test-generator/self_heal_v2.py --results results.json
+    addSpnToEnvironment: true
+  env:
+    AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+    AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+
+
+*********************************************************************
+
+# Usage examples:
+python script.py --input failing_test.spec.ts
+python script.py --input test.spec.ts --output fixed_test.spec.ts
+python script.py --input my_test.ts --mcp-config custom_mcp.json
+***********************************************************************************
+
+python self_heal_v7.py --task "Resolve the error in the test script" --test-script tests/generated_test_output_3.spec.ts --error-json test-result-3.json
+
+
+- timing issues
+- dead clicks
+- network errors
+...and many other common errors.

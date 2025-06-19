@@ -1,0 +1,12 @@
+<testsuites id="" name="" tests="1" failures="1" skipped="0" errors="0" time="121.896987">
+<testsuite name="ai-foundry-language-playground.spec.ts" timestamp="2025-06-18T18:59:00.075Z" hostname="chromium" tests="1" failures="1" skipped="0" time="120.005" errors="0">
+<testcase name="Azure AI Foundry Language Playground navigation" classname="ai-foundry-language-playground.spec.ts" time="120.005">
+<failure message="ai-foundry-language-playground.spec.ts:4:5 Azure AI Foundry Language Playground navigation" type="FAILURE">
+<![CDATA[  [chromium] › ai-foundry-language-playground.spec.ts:4:5 › Azure AI Foundry Language Playground navigation 
+
+    Test timeout of 120000ms exceeded.
+]]>
+</failure>
+</testcase>
+</testsuite>
+</testsuites>

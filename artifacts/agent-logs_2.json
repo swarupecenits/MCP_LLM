@@ -1,0 +1,5 @@
+{
+  "user_task": "\n1. Navigate to https://www.cricbuzz.com/.\n2. Locate and extract the titles of the latest cricket news articles on the homepage.\n3. Close the browser.\n",
+  "generated_script": "import { test, expect } from '@playwright/test';\n\ntest('ExtractLatestNewsTitles', async ({ page }) => {\n  // Step 1: Navigate to Cricbuzz homepage\n  await page.goto('https://www.cricbuzz.com/', { waitUntil: 'networkidle' });\n\n  // Step 2: Locate the section containing latest cricket news articles\n  const newsSection = page.locator('h2:has-text(\"LATEST NEWS\")').locator('..');\n\n  // Step 3: Extract the titles of the articles\n  const articleTitles = await newsSection.locator('a').allTextContents();\n  console.log('Latest News Titles:', articleTitles);\n\n  // Step 4: Close the browser\n  await page.close();\n});",
+  "status": "success"
+}

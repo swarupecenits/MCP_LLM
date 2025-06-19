@@ -1,0 +1,13 @@
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.vscode
+auth
+mcp_env
+test-results-debug
+.env
+package-lock.json

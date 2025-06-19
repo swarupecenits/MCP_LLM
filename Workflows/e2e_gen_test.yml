@@ -1,0 +1,299 @@
+trigger: none
+
+pr:
+  branches:
+    include:
+      - e2e_test_generator
+
+pool:
+  vmImage: Vienna-UX-Windows2022-E2E
+
+variables:
+  azureServiceConnection: 4ecf8aae-953d-4450-8edf-f00f2606b494
+  ENVIRONMENT: local
+  NEW_BRANCH_NAME: ai-generated-tests-$(Build.BuildId)
+
+stages:
+  - stage: Generate_E2E_Tests
+    jobs:
+      - job: GenerateTestsJob
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+        pool:
+          name: Vienna-UX-Windows2022-E2E
+
+        steps:
+          - powershell: |
+              Write-Host "Debug: Pipeline triggered"
+              Write-Host "Build.Reason: $(Build.Reason)"
+              Write-Host "Build.SourceBranch: $(Build.SourceBranch)"
+              Write-Host "System.PullRequest.PullRequestId: $(System.PullRequest.PullRequestId)"
+              Write-Host "System.PullRequest.SourceBranch: $(System.PullRequest.SourceBranch)"
+              Write-Host "System.PullRequest.TargetBranch: $(System.PullRequest.TargetBranch)"
+            displayName: "Debug Pipeline Trigger Information"
+
+          - powershell: |
+              Write-Host "--- Identifying Build Service Identities ---"
+              $project = "$(System.TeamProject)"
+              $collectionUri = "$(System.TeamFoundationCollectionUri)"
+              $orgName = $collectionUri.Split('/')[-1]
+
+              $projectBuildService = "[$project]\$project Build Service"
+              $collectionBuildServiceOrg = "Project Collection Build Service ($orgName)"
+              $collectionBuildServiceGuid = "Project Collection Build Service ($(System.CollectionId))"
+
+              Write-Host "The pipeline is running in the project: $project"
+              Write-Host "Make sure one of the following build service identities has 'Contribute to pull requests' permission on the repository:"
+              Write-Host "1. PROJECT-SCOPED IDENTITY: $projectBuildService"
+              Write-Host "2. COLLECTION-SCOPED IDENTITY (search by name): $collectionBuildServiceOrg"
+              Write-Host "3. COLLECTION-SCOPED IDENTITY (search by GUID): $collectionBuildServiceGuid"
+              Write-Host "--------------------------------------------"
+            displayName: "Print Build Service Identities"
+
+          - template: ../../apps/ai-studio/pipeline/templates/e2e-test-setup.yml
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "22.x"
+            displayName: "Install Node.js"
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+              addToPath: true
+            displayName: "Use Python 3.11"
+
+          - powershell: |
+              Write-Host "Installing Yarn and Lerna..."
+              npm install -g yarn
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to install Yarn"
+                  exit 1
+              }
+
+              npm install -g lerna
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to install Lerna"
+                  exit 1
+              }
+
+              Write-Host "Navigating to token server directory..."
+              cd "$(Build.SourcesDirectory)"
+
+              Write-Host "Starting token server in background with logs..."
+              $logPath = "$(Build.ArtifactStagingDirectory)\token-server.log"
+              Start-Process -FilePath "cmd.exe" `
+                -ArgumentList "/c yarn start token-server > `"$logPath`" 2>&1" `
+                -NoNewWindow
+
+              Write-Host "Waiting for server to initialize..."
+              Start-Sleep -Seconds 15
+
+              Write-Host "Token server started. Dumping current logs:"
+              Get-Content $logPath -Tail 100
+            displayName: "Start Token Server in Background with Logs"
+
+          - task: PowerShell@2
+            displayName: "Install Playwright, Browsers, and Start MCP Server"
+            inputs:
+              targetType: "inline"
+              script: |
+                $OutputEncoding = [System.Text.Encoding]::UTF8
+                Write-Host "Updating npm to latest version..."
+                npm install -g npm@latest
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install -g npm@latest failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Creating temporary Node.js project..."
+                New-Item -ItemType Directory -Path "playwright_project" -Force | Out-Null
+                Set-Location -Path "playwright_project"
+                npm init -y
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm init failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing @playwright/test..."
+                npm install @playwright/test
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install @playwright/test failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing Playwright browser dependencies..."
+                $maxRetries = 3
+                $retryCount = 0
+                while ($retryCount -lt $maxRetries) {
+                    Write-Host "Attempt $($retryCount + 1) to install Playwright browsers..."
+                    npx playwright install --with-deps
+                    if ($LASTEXITCODE -eq 0) {
+                        break
+                    }
+                    $retryCount++
+                    Start-Sleep -Seconds 5
+                }
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Playwright browser installation failed after $maxRetries attempts. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing Playwright MCP server globally..."
+                npm install -g @playwright/mcp@latest
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install -g @playwright/mcp failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Starting Playwright MCP server in background..."
+                Start-Process -FilePath "cmd.exe" `
+                  -ArgumentList "/c npx @playwright/mcp@latest --port 8931 --host 127.0.0.1" `
+                  -NoNewWindow
+
+                Start-Sleep -Seconds 15
+                Write-Host "Checking MCP server status..."
+                netstat -ano | findstr :8931
+                Write-Host "Playwright MCP server started successfully"
+              retry: 3
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r scripts/e2e-test-generator/requirements.txt
+            displayName: "Install Python Dependencies"
+
+          - task: PowerShell@2
+            inputs:
+              targetType: "inline"
+              script: |
+                # Verify PR context
+                if (-not $env:System_PullRequest_PullRequestId) {
+                    Write-Error "This script must run in a PR-triggered pipeline."
+                    exit 1
+                }
+                # Call the Azure DevOps Services Rest API
+                $url = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$env:SYSTEM_TEAMPROJECTID/_apis/git/repositories/$(Build.Repository.ID)/pullRequests/$(System.PullRequest.PullRequestId)?api-version=7.0"
+                $headers = @{
+                    Authorization = "Bearer $(System.AccessToken)"
+                }
+                try {
+                    $pullRequestInfo = Invoke-RestMethod -Uri $url -Method 'Get' -ContentType 'application/json' -Headers $headers -ErrorAction Stop
+                } catch {
+                    Write-Error "Failed to retrieve PR info: $_"
+                    exit 1
+                }
+                # Get PR description
+                $description = $pullRequestInfo.description
+                # Output the description for logging
+                Write-Host "Description: $description"
+                # Set the description as a pipeline variable
+                Write-Host "##vso[task.setvariable variable=PRDescription]$description"
+            displayName: "Extract PR Description"
+
+          - task: AzureCLI@2
+            displayName: "Run Test Generation Script"
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: ps
+              scriptLocation: inlineScript
+              inlineScript: |
+                # Verify PR context
+                if (-not $env:System_PullRequest_PullRequestId) {
+                    Write-Error "This script must run in a PR-triggered pipeline."
+                    exit 1
+                }
+                # Call the Azure DevOps Services REST API
+                $url = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$env:SYSTEM_TEAMPROJECTID/_apis/git/repositories/$(Build.Repository.ID)/pullRequests/$(System.PullRequest.PullRequestId)?api-version=7.0"
+                $headers = @{
+                    Authorization = "Bearer $(System.AccessToken)"
+                }
+                try {
+                    $pullRequestInfo = Invoke-RestMethod -Uri $url -Method 'Get' -ContentType 'application/json' -Headers $headers -ErrorAction Stop
+                } catch {
+                    Write-Error "Failed to retrieve PR info: $_"
+                    exit 1
+                }
+                # Get PR description
+                $description = $pullRequestInfo.description
+                # Output the description for logging
+                Write-Host "Description: $description"
+                # Escape special characters in description to handle quotes and newlines
+                $escapedDescription = $description -replace '"', '\"' -replace "`n", "\n" -replace "`r", ""
+                # Run the Python script with the escaped description
+                Write-Host "Running AI Agent with user task..."
+                python scripts/e2e-test-generator/agent_v3.py --task "$escapedDescription"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Python script Agent failed. Aborting task."
+                    exit 1
+                }
+                Write-Host "Python script completed successfully."
+            env:
+              AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+              AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+          - powershell: |
+              Write-Host "Configuring git user..."
+              git config user.email "t-schanda@microsoft.com"
+              git config user.name "schandamsft"
+
+              Write-Host "Target branch for new PR: $(System.PullRequest.SourceBranch)"
+              Write-Host "Creating new branch: $(NEW_BRANCH_NAME)"
+              git checkout -b $(NEW_BRANCH_NAME)
+
+              Write-Host "Adding generated tests..."
+              git add tests/
+
+              Write-Host "Checking for changes..."
+              $changes = git status --porcelain
+              if (-not $changes) {
+                  Write-Host "No changes to commit. Skipping commit and PR creation."
+                  exit 0
+              }
+
+              Write-Host "Committing changes..."
+              git commit -m "Add AI-generated Playwright tests for PR #$(System.PullRequest.PullRequestId)"
+
+              Write-Host "Pushing to new branch..."
+              git push https://$(System.AccessToken)@msdata.visualstudio.com/Vienna/_git/workspace-portal HEAD:$(NEW_BRANCH_NAME)
+            displayName: "Push AI-Generated Tests to New Branch"
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+              SYSTEM_PULLREQUEST_SOURCEBRANCH: $(System.PullRequest.SourceBranch)
+              SYSTEM_PULLREQUEST_PULLREQUESTID: $(System.PullRequest.PullRequestId)
+
+          - powershell: |
+              Write-Host "Creating new PR for AI-generated tests..."
+              $targetBranch = "$(System.PullRequest.SourceBranch)"
+              $targetBranch = $targetBranch -replace '^refs/heads/', ''
+              $prTitle = "AI-Generated Tests for PR #$(System.PullRequest.PullRequestId) [Build $(Build.BuildId)]"
+              $prDescription = "This PR contains AI-generated Playwright tests based on the description of PR #$(System.PullRequest.PullRequestId). Please review the generated tests for accuracy and completeness."
+
+              az repos pr create `
+                --repository workspace-portal `
+                --source $(NEW_BRANCH_NAME) `
+                --target $targetBranch `
+                --title "$prTitle" `
+                --description "$prDescription" `
+                --project Vienna `
+                --organization https://msdata.visualstudio.com `
+                --output table
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to create PR. Aborting."
+                  exit 1
+              }
+              Write-Host "New PR created successfully targeting $targetBranch."
+            displayName: "Create New Pull Request for AI-Generated Tests"
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+              SYSTEM_PULLREQUEST_SOURCEBRANCH: $(System.PullRequest.SourceBranch)
+              SYSTEM_PULLREQUEST_PULLREQUESTID: $(System.PullRequest.PullRequestId)
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+          - powershell: |
+              Write-Host "Pipeline completed successfully."
+              Write-Host "AI-generated tests have been pushed to branch: $(NEW_BRANCH_NAME)"
+              Write-Host "A new PR has been created targeting: $(System.PullRequest.SourceBranch)"
+              Write-Host "Original PR: #$(System.PullRequest.PullRequestId)"
+              Write-Host "Please review the new PR containing the generated tests."
+            displayName: "Pipeline Completion Summary"
+            env:
+              SYSTEM_PULLREQUEST_SOURCEBRANCH: $(System.PullRequest.SourceBranch)
+              SYSTEM_PULLREQUEST_PULLREQUESTID: $(System.PullRequest.PullRequestId)

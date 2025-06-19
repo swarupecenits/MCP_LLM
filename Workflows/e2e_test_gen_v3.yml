@@ -1,0 +1,301 @@
+trigger:
+  branches:
+    include:
+      - e2e_test_generator
+pr: none
+
+pool:
+  vmImage: Vienna-UX-Windows2022-E2E
+
+variables:
+  BRANCH_NAME: "ai-generated-e2e-tests-$(Build.BuildId)"
+  azureServiceConnection: 4ecf8aae-953d-4450-8edf-f00f2606b494
+  TARGET_BRANCH: "e2e_test_generator"
+  ENVIRONMENT: local
+
+stages:
+  - stage: Generate_E2E_Tests
+    jobs:
+      - job: GenerateTestsJob
+
+        condition: |
+          and(
+            succeeded(),
+            eq(variables['Build.SourceBranch'], 'refs/heads/e2e_test_generator'),
+            or(
+              contains(variables['Build.SourceVersionMessage'], 'Merged PR'),
+              contains(variables['Build.SourceVersionMessage'], 'Merge pull request')
+            )
+          )
+
+        pool:
+          name: Vienna-UX-Windows2022-E2E
+        steps:
+          - template: ../../apps/ai-studio/pipeline/templates/e2e-test-setup.yml
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "22.x"
+            displayName: "Install Node.js"
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+              addToPath: true
+            displayName: "Use Python 3.11"
+
+          # Extract PR description and save to file
+          - task: PowerShell@2
+            displayName: "Extract PR Description and Save to File"
+            inputs:
+              targetType: "inline"
+              script: |
+                Write-Host "Extracting PR description from git history..."
+
+                # Get the latest commit message (merge commit)
+                $commitMessage = git log -1 --pretty=format:"%B"
+                Write-Host "Latest commit message:"
+                Write-Host $commitMessage
+
+                # Extract the description part after "Merged PR XXXXXX:"
+                $prDescription = ""
+                if ($commitMessage -match "Merged PR \d+:\s*(.+)") {
+                    $prDescription = $matches[1].Trim()
+                    Write-Host "Extracted PR description:"
+                    Write-Host "=" * 50
+                    Write-Host $prDescription
+                    Write-Host "=" * 50
+                    
+                    # Save to file for Python script
+                    Set-Content -Path "pr_description.txt" -Value $prDescription -Encoding UTF8
+                    Write-Host "PR description saved to pr_description.txt"
+                    
+                    # Also set as pipeline variable
+                    Write-Host "##vso[task.setvariable variable=PR_DESCRIPTION]$prDescription"
+                    
+                } else {
+                    Write-Error "Could not extract PR description from commit message"
+                    exit 1
+                }
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+          - powershell: |
+              Write-Host "Installing Yarn and Lerna..."
+              npm install -g yarn
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to install Yarn"
+                  exit 1
+              }
+
+              npm install -g lerna
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to install Lerna"
+                  exit 1
+              }
+
+              Write-Host "Navigating to token server directory..."
+              cd "$(Build.SourcesDirectory)"
+
+              Write-Host "Starting token server in background with logs..."
+              $logPath = "$(Build.ArtifactStagingDirectory)\token-server.log"
+              Start-Process -FilePath "cmd.exe" `
+                -ArgumentList "/c yarn start token-server > `"$logPath`" 2>&1" `
+                -NoNewWindow
+
+              Write-Host "Waiting for server to initialize..."
+              Start-Sleep -Seconds 15
+
+              Write-Host "Token server started. Dumping current logs:"
+              Get-Content $logPath -Tail 100
+            displayName: "Start Token Server in Background with Logs"
+
+          - task: PowerShell@2
+            displayName: "Install Playwright, Browsers, and Start MCP Server"
+            inputs:
+              targetType: "inline"
+              azureSubscription: 4ecf8aae-953d-4450-8edf-f00f2606b494
+              script: |
+                $OutputEncoding = [System.Text.Encoding]::UTF8
+                Write-Host "Updating npm to latest version..."
+                npm install -g npm@latest
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install -g npm@latest failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Creating temporary Node.js project..."
+                New-Item -ItemType Directory -Path "playwright_project" -Force | Out-Null
+                Set-Location -Path "playwright_project"
+                npm init -y
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm init failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing @playwright/test..."
+                npm install @playwright/test
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install @playwright/test failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing Playwright browser dependencies..."
+                $maxRetries = 3
+                $retryCount = 0
+                while ($retryCount -lt $maxRetries) {
+                    Write-Host "Attempt $($retryCount + 1) to install Playwright browsers..."
+                    npx playwright install --with-deps
+                    if ($LASTEXITCODE -eq 0) {
+                        break
+                    }
+                    $retryCount++
+                    Start-Sleep -Seconds 5
+                }
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Playwright browser installation failed after $maxRetries attempts. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Installing Playwright MCP server globally..."
+                npm install -g @playwright/mcp@latest
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "npm install -g @playwright/mcp failed. Aborting."
+                    exit $LASTEXITCODE
+                }
+
+                Write-Host "Starting Playwright MCP server in background..."
+                Start-Process -FilePath "cmd.exe" `
+                  -ArgumentList "/c npx @playwright/mcp@latest --port 8931 --host 127.0.0.1" `
+                  -NoNewWindow
+                  
+                Start-Sleep -Seconds 15
+                Write-Host "Checking MCP server status..."
+                netstat -ano | findstr :8931
+                Write-Host "Playwright MCP server started successfully"
+              retry: 3
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r scripts/e2e-test-generator/requirements.txt
+            displayName: "Install Python Dependencies"
+
+          # Verify PR description was extracted
+          - task: PowerShell@2
+            displayName: "Verify PR Description"
+            inputs:
+              targetType: "inline"
+              script: |
+                Write-Host "Verifying PR description file exists..."
+                if (Test-Path "pr_description.txt") {
+                    Write-Host "PR description file found. Contents:"
+                    $content = Get-Content "pr_description.txt" -Raw
+                    Write-Host $content
+                    Write-Host "Character count: $($content.Length)"
+                } else {
+                    Write-Error "PR description file not found!"
+                    exit 1
+                }
+
+          - task: AzureCLI@2
+            displayName: "Run Test Generation Script with PR Description"
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: ps
+              scriptLocation: inlineScript
+              inlineScript: |
+                Write-Host "Reading PR description from file..."
+                if (Test-Path "pr_description.txt") {
+                    $userTask = Get-Content -Path "pr_description.txt" -Raw -Encoding UTF8
+                    Write-Host "User Task extracted from PR:"
+                    Write-Host "=" * 50
+                    Write-Host $userTask
+                    Write-Host "=" * 50
+                    
+                    # Escape quotes and special characters for command line
+                    $escapedTask = $userTask -replace '"', '""'
+                    
+                    Write-Host "Running agent_v3.py with extracted PR description..."
+                    python scripts/e2e-test-generator/agent_v3.py --task "$escapedTask"
+                    
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Python script 'agent_v3.py' failed with exit code $LASTEXITCODE"
+                        exit $LASTEXITCODE
+                    }
+                    Write-Host "Test generation completed successfully."
+                } else {
+                    Write-Error "PR description file not found. Cannot proceed with test generation."
+                    exit 1
+                }
+            env:
+              AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
+              AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
+
+          - powershell: |
+              Write-Host "Configuring git user..."
+              git config user.email "t-schanda@microsoft.com"
+              git config user.name "schandamsft"
+
+              Write-Host "Creating new branch: $(BRANCH_NAME)"
+              git checkout -b $(BRANCH_NAME)
+
+              Write-Host "Adding generated tests..."
+              git add tests/
+
+              Write-Host "Checking if there are changes to commit..."
+              $changes = git diff --cached --name-only
+              if ($changes) {
+                  Write-Host "Changes detected:"
+                  Write-Host $changes
+                  
+                  Write-Host "Committing changes..."
+                  git commit -m "Add AI-generated Playwright tests based on PR: $(PR_DESCRIPTION)"
+
+                  Write-Host "Pushing to remote branch..."
+                  git push https://$(System.AccessToken)@msdata.visualstudio.com/Vienna/_git/workspace-portal HEAD:$(BRANCH_NAME)
+              } else {
+                  Write-Host "No changes to commit. Skipping commit and push."
+              }
+            displayName: "Push AI-Generated Tests to the Repo"
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+          - powershell: |
+              Write-Host "Checking if branch was pushed..."
+              $branchExists = git ls-remote --heads https://$(System.AccessToken)@msdata.visualstudio.com/Vienna/_git/workspace-portal $(BRANCH_NAME)
+
+              if ($branchExists) {
+                  Write-Host "Branch exists. Creating Azure DevOps PR..."
+                  
+                  $prTitle = "AI-Generated E2E Tests [Build $(Build.BuildId)]"
+                  $prDescriptionText = @"
+                  # AI-Generated End-to-End Tests
+
+                  This PR contains automatically generated Playwright tests based on the following requirements:
+
+                  ## Original Task Description:
+                  $(PR_DESCRIPTION)
+
+                  ## Generated Content:
+                  - New E2E test files in the `tests/` directory
+                  - Tests generated using AI based on the PR description
+                  - Build ID: $(Build.BuildId)
+
+                  Please review the generated tests before merging.
+                  "@
+
+                  az repos pr create `
+                    --repository workspace-portal `
+                    --source $(BRANCH_NAME) `
+                    --target $(TARGET_BRANCH) `
+                    --title "$prTitle" `
+                    --description "$prDescriptionText" `
+                    --project Vienna `
+                    --organization https://msdata.visualstudio.com `
+                    --output table
+              } else {
+                  Write-Host "Branch was not pushed (likely no changes). Skipping PR creation."
+              }
+            displayName: "Create Pull Request"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)

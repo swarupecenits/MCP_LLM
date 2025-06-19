@@ -1,0 +1,21 @@
+{
+  "name": "@mlworkspace/token-server",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "./build/token-server.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "lint": "concurrently \"yarn:lint:*\"",
+    "lint:es": "cross-env-shell NODE_OPTIONS=--max_old_space_size=32768 eslint src --ext .ts,.tsx,.js,.jsx --quiet",
+    "lintfix": "concurrently \"yarn:lint:es --cache --cache-strategy content --fix\"",
+    "start": "nodemon -V"
+  },
+  "resolutions": {
+    "undefsafe": "^2.0.3"
+  },
+  "dependencies": {
+    "nodemon": "3.1.9",
+    "ts-node": "^10.9.2"
+  }
+}

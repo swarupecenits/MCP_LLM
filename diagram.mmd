@@ -1,0 +1,26 @@
+---
+title: AI Test Generation Flow
+---
+flowchart TD
+    A["AI Agent"]
+    B["MCP-USE Wrapper"]
+    C["MCP Client"]
+    D["MCP Server<br>(Playwright MCP)"]
+    E["Browser Instance<br>(Playwright)"]
+    F["Playwright Test Script<br>(generated_test_output.spec.ts)"]
+
+    %% Main linear process
+    A -->|Uses| B
+    B -->|Connects| C
+    C -->|Sends Commands| D
+    D -->|Controls| E
+    A -->|Generates| F
+
+    %% Feedback and data flows (shown as dotted lines)
+    E -.->|Captures DOM| D
+    D -.->|Streams Data| C
+    C -.->|Relays Data| B
+    B -.->|Sends to| A
+
+    style A stroke-width:4px,stroke-dasharray: 0
+    linkStyle 5,6,7,8 stroke: #888, stroke-width:2px, stroke-dasharray: 5,7
