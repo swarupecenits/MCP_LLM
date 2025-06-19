@@ -71,14 +71,14 @@
   },
   "suites": [
     {
-      "title": "ai-foundry-language-playground.spec.ts",
-      "file": "ai-foundry-language-playground.spec.ts",
+      "title": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
+      "file": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
       "column": 0,
       "line": 0,
       "specs": [
         {
           "title": "Azure AI Foundry Language Playground navigation",
-          "ok": false,
+          "ok": true,
           "tags": [],
           "tests": [
             {
@@ -91,30 +91,22 @@
                 {
                   "workerIndex": 0,
                   "parallelIndex": 0,
-                  "status": "timedOut",
-                  "duration": 120005,
-                  "error": {
-                    "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m",
-                    "stack": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
-                  },
-                  "errors": [
-                    {
-                      "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
-                    }
-                  ],
+                  "status": "passed",
+                  "duration": 5569,
+                  "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2025-06-18T18:59:01.438Z",
+                  "startTime": "2025-06-19T14:21:57.336Z",
                   "annotations": [],
                   "attachments": []
                 }
               ],
-              "status": "unexpected"
+              "status": "expected"
             }
           ],
-          "id": "2832638950b87361df51-bda842e9c590036e13f5",
-          "file": "ai-foundry-language-playground.spec.ts",
+          "id": "ddf0a7c6b276b5670b01-b0d41d79ef422c115dce",
+          "file": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
           "line": 4,
           "column": 5
         }
@@ -123,11 +115,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2025-06-18T18:59:00.052Z",
-    "duration": 121896.987,
-    "expected": 0,
+    "startTime": "2025-06-19T14:21:56.043Z",
+    "duration": 6901.794000000001,
+    "expected": 1,
     "skipped": 0,
-    "unexpected": 1,
+    "unexpected": 0,
     "flaky": 0
   }
 }

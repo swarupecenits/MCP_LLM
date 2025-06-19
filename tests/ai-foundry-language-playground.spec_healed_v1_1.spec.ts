@@ -15,7 +15,7 @@ test("Azure AI Foundry Language Playground navigation", async () => {
   await page.goto(
     "https://ai.azure.com/foundryProject/overview?wsid=/subscriptions/696debc0-8b66-4d84-87b1-39f43917d76c/resourceGroups/rg-t-schanda-8629/providers/Microsoft.CognitiveServices/accounts/playwright-pj-resource/projects/playwright_pj&tid=72f988bf-86f1-41af-91ab-2d7cd011db47",
   );
-  await page.getByText("Playgrounds").first().waitFor({ state: "visible", timeout: 1 }); 
+  await page.getByRole("link", { name: "Playgrounds" }).waitFor({ state: "visible", timeout: 5000 });
 
   // Step 2: Go to Playgrounds
   await page.getByRole("link", { name: "Playgrounds" }).click();

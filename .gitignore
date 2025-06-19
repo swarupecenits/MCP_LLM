@@ -9,5 +9,4 @@ node_modules/
 auth
 mcp_env
 test-results-debug
-.env
 package-lock.json
