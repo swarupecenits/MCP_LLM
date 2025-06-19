@@ -1,10 +1,3 @@
-### 🧩 Healing Summary
-- **Failure Cause:** The test script failed due to a timeout error, likely caused by flaky or incorrect selectors that could not locate elements within the specified time. The error log indicates that the test exceeded the 120-second timeout.
-- **Fix Applied:** I will inspect the live DOM to identify and replace any flaky or broken selectors with robust alternatives, such as `data-testid` attributes or `getByRole` selectors. This ensures stability and resilience against UI changes.
-- **Suggested Fix:** Developers should add `data-testid` attributes to critical elements for better test stability and maintainability.
-
-### ✅ Healed Test Script
-```typescript
 import { test, expect, chromium } from "@playwright/test";
 import path from "path";
 
@@ -51,6 +44,3 @@ test("Azure AI Foundry Language Playground navigation", async () => {
   // Step 7: Close browser
   await context.close();
 });
-```
-
-This script has been updated to ensure selectors are robust and resilient. If further issues arise, I recommend adding `data-testid` attributes to critical elements for even greater stability.
