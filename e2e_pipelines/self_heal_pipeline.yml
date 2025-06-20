@@ -8,8 +8,8 @@ variables:
   azureServiceConnection: 4ecf8aae-953d-4450-8edf-f00f2606b494
   ENVIRONMENT: local
   NEW_BRANCH_NAME: self-healed-tests-$(Build.BuildId)
-  TEST_SCRIPT_PATH: tests/LanguageModelCatalog.spec.ts
-  ERROR_JSON_PATH: ai-result_2.json
+  TEST_SCRIPT_PATH: tests/ai-foundry-language-playground.spec.ts
+  ERROR_JSON_PATH: scripts/e2e-test-generator/test-ai-result.json
   TARGET_BRANCH: e2e_test_generator
 
 stages:
@@ -20,7 +20,6 @@ stages:
           name: Vienna-UX-Windows2022-E2E
 
         steps:
-
           - template: ../../apps/ai-studio/pipeline/templates/e2e-test-setup.yml
 
           - task: NodeTool@0
@@ -134,41 +133,20 @@ stages:
               retry: 3
 
           - powershell: |
-              Write-Host "Checking for deprecated always-auth config..."
-              $npmrcPath = "$(Build.SourcesDirectory)/.npmrc"
-              if (Test-Path $npmrcPath) {
-                  (Get-Content $npmrcPath) -replace '^always-auth=.*$', '' | Set-Content $npmrcPath
-                  Write-Host "Removed always-auth from .npmrc"
-              }
-              $packageJsonPath = "$(Build.SourcesDirectory)/package.json"
-              if (Test-Path $packageJsonPath) {
-                  $packageJson = Get-Content $packageJsonPath | ConvertFrom-Json
-                  if ($packageJson.config.'always-auth') {
-                      $packageJson.config.PSObject.Properties.Remove('always-auth')
-                      $packageJson | ConvertTo-Json -Depth 100 | Set-Content $packageJsonPath
-                      Write-Host "Removed always-auth from package.json"
-                  }
-              }
-
               Write-Host "Running Playwright test to generate error logs..."
               Set-Location -Path "$(Build.SourcesDirectory)"
-              npx playwright test $(TEST_SCRIPT_PATH) --reporter=json --trace on > $(ERROR_JSON_PATH) 2>&1
-              $playwrightExitCode = $LASTEXITCODE
-              Write-Host "Playwright test completed with exit code $playwrightExitCode. Error logs saved to $(ERROR_JSON_PATH)"
-              
-              # Copy logs to a backup file
-              $backupPath = "$(Build.SourcesDirectory)/scripts/e2e-test-generator/test-ai-result-backup.json"
-              Copy-Item -Path $(ERROR_JSON_PATH) -Destination $backupPath -Force
-              Write-Host "Error logs copied to $backupPath"
-              
-              # Display last 100 lines of the log for debugging
+              npx playwright test $(TEST_SCRIPT_PATH) --reporter=json --trace on > $(ERROR_JSON_PATH)
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Warning "Playwright test passed. No errors to heal."
+                  exit 0
+              }
+              Write-Host "Playwright test failed as expected. Error logs saved to $(ERROR_JSON_PATH)"
+              if (-not (Test-Path $(ERROR_JSON_PATH))) {
+                  Write-Error "Error JSON file not generated at $(ERROR_JSON_PATH)"
+                  exit 1
+              }
               Get-Content $(ERROR_JSON_PATH) -Tail 100
-              
-              # Allow pipeline to continue even if Playwright test fails
-              Write-Host "Proceeding to next step despite test failure (expected behavior)."
-              exit 0
             displayName: "Run Playwright Test and Generate Error Logs"
-            continueOnError: true
 
           - task: AzureCLI@2
             displayName: "Run Self-Healing Script"

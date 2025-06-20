@@ -150,3 +150,29 @@ Now create a playwright test script for the exact ections you performed taking c
 ********************************************************************************************
 
 Now read these context files and generate a new test script file in the test directory remembering the last logic that you have used in the final tests\fine_tune_gpt41.spec.ts
+
+
+*************************************************************************************************
+
+Generate a playwright test scripts for this scenario:
+Navigate to the url:
+https://ai.azure.com/foundryProject/overview?wsid=/subscriptions/696debc0-8b66-4d84-87b1-39f43917d76c/resourceGroups/rg-pritam-fdp-1/providers/Microsoft.CognitiveServices/accounts/pritam-fdp-1-resource/projects/pritam-fdp-1&tid=72f988bf-86f1-41af-91ab-2d7cd011db47
+GO to Fine Tuning
+Click on "Fine-tune Model"
+Select "o4-mini" from Base Models
+Click on next
+Click on Add Training data
+Select dropdown on Select data
+Select "train_500.jsonl" json file
+Click on Apply
+Click on Add Validation data
+Select dropdown on Select data
+Select "validation_data_2025-05-20.jsonl" json file
+Click on Apply
+Go to Grader schema nd click on text input space and enter this code segment
+"{"name":"grader-TYpcgoZgbhDW","type":"multi","graders":{"donors":{"name":"donors","type":"string_check","input":"{{item.reference_answer.donors}}","operation":"eq","reference":"{{sample.output_json.donors}}"},"acceptors":{"name":"acceptors","type":"string_check","input":"{{item.reference_answer.acceptors}}","operation":"eq","reference":"{{sample.output_json.acceptors}}"}},"calculate_output":"0.5 * donors + 0.5 *acceptors"} "
+Click on submit button and wait till the model name gets visible in the page
+Now create a playwright test script for the exact ections you performed taking consider of the timeout issues
+
+
+********************************************************************************************************

@@ -1,0 +1,81 @@
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  BRANCH_NAME: "ai-generated-tests-$(Build.BuildId)"
+  azureServiceConnection: "browsertest-service-connection"
+
+stages:
+  - stage: GenerateTests
+    jobs:
+      - job: GenerateTestsJob
+        pool:
+          name: pipeline-1ES-ubuntu
+        steps:
+          - checkout: self
+            persistCredentials: "true"
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "18.x"
+            displayName: "Install Node.js"
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+              addToPath: true
+            displayName: "Use Python 3.11"
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r scripts/e2e-test-generator/requirements.txt
+            displayName: "Install Python Dependencies"
+
+          - script: |
+              echo "$SYSTEM_PULLREQUEST_PULLREQUESTDESCRIPTION" > pr_description.txt
+              echo "Extracted PR Description:"
+              cat pr_description.txt
+            displayName: "Extract PR Description"
+
+          - task: AzureCLI@2
+            displayName: "Run script with Azure auth context"
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                echo "Running Python script with Azure CLI context..."
+                python scripts/e2e-test-generator/generate_tests.py
+            env:
+              CLIENT_ID: $(CLIENT_ID)
+              PROJECT_ENDPOINT: $(PROJECT_ENDPOINT)
+              MODEL_DEPLOYMENT_NAME: $(MODEL_DEPLOYMENT_NAME)
+              PLAYWRIGHT_CONNECTION_ID: $(PLAYWRIGHT_CONNECTION_ID)
+              BROWSER_AGENT_ID: $(BROWSER_AGENT_ID)
+
+          - script: |
+              git config user.email "t-schanda@microsoft.com"
+              git config user.name "schandamsft"
+              git checkout -b $(BRANCH_NAME)
+              git add tests/
+              git commit -m "Add AI-generated Playwright tests"
+              git push https://$(System.AccessToken)@msdata.visualstudio.com/Vienna/_git/workspace-portal HEAD:$(BRANCH_NAME)
+            displayName: "Push AI-Generated Tests to the Repo"
+
+          - script: |
+              echo "Creating Azure DevOps PR..."
+              az repos pr create \
+               --repository workspace-portal \
+               --source $(BRANCH_NAME) \
+               --target e2e_test_generator \
+               --title "AI-Generated Tests [Build $(Build.BuildId)]" \
+               --description "Generated via LLM based on PR description" \
+               --project Vienna \
+               --organization https://msdata.visualstudio.com \
+               --output table
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+            displayName: "Create Pull Request"

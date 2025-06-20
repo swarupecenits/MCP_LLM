@@ -1,0 +1,5 @@
+1. Navigate to ai.azure.com?auth=local.
+2. Navigate to Model Catalogue.
+3. Search for Azure Speech.
+4. See if the Azure AI Speech is visible or not
+5. Close the browser.
