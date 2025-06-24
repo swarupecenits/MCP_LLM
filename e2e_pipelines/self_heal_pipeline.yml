@@ -52,21 +52,38 @@ stages:
                   exit 1
               }
 
-              Write-Host "Navigating to token server directory..."
+              Write-Host "Navigating to source directory..."
               cd "$(Build.SourcesDirectory)"
 
               Write-Host "Starting token server in background with logs..."
-              $logPath = "$(Build.ArtifactStagingDirectory)\token-server.log"
+              $tokenLogPath = "$(Build.ArtifactStagingDirectory)\token-server.log"
               Start-Process -FilePath "cmd.exe" `
-                -ArgumentList "/c yarn start token-server > `"$logPath`" 2>&1" `
+                -ArgumentList "/c yarn start token-server > `"$tokenLogPath`" 2>&1" `
                 -NoNewWindow
 
-              Write-Host "Waiting for server to initialize..."
-              Start-Sleep -Seconds 15
+              Write-Host "Starting AI Studio server in background with logs..."
+              $aiStudioLogPath = "$(Build.ArtifactStagingDirectory)\ai-studio.log"
+              Start-Process -FilePath "cmd.exe" `
+                -ArgumentList "/c yarn start:ai-studio > `"$aiStudioLogPath`" 2>&1" `
+                -NoNewWindow
 
-              Write-Host "Token server started. Dumping current logs:"
-              Get-Content $logPath -Tail 100
-            displayName: "Start Token Server in Background with Logs"
+              Write-Host "Waiting for servers to initialize..."
+              Start-Sleep -Seconds 30
+
+              Write-Host "Token server logs:"
+              if (Test-Path $tokenLogPath) {
+                  Get-Content $tokenLogPath -Tail 100
+              } else {
+                  Write-Warning "Token server log file not found at $tokenLogPath"
+              }
+
+              Write-Host "AI Studio server logs:"
+              if (Test-Path $aiStudioLogPath) {
+                  Get-Content $aiStudioLogPath -Tail 100
+              } else {
+                  Write-Warning "AI Studio server log file not found at $aiStudioLogPath"
+              }
+            displayName: "Start Token Server and AI Studio Server in Background with Logs"
 
           - task: PowerShell@2
             displayName: "Install Playwright, Browsers, and Start MCP Server"
@@ -132,46 +149,53 @@ stages:
                 Write-Host "Playwright MCP server started successfully"
               retry: 3
 
-          - powershell: |
-              Write-Host "Running Playwright test to generate error logs..."
-              Set-Location -Path "$(Build.SourcesDirectory)"
-              npx playwright test $(TEST_SCRIPT_PATH) --reporter=json --trace on > $(ERROR_JSON_PATH)
-              if ($LASTEXITCODE -eq 0) {
-                  Write-Warning "Playwright test passed. No errors to heal."
-                  exit 0
-              }
-              Write-Host "Playwright test failed as expected. Error logs saved to $(ERROR_JSON_PATH)"
-              if (-not (Test-Path $(ERROR_JSON_PATH))) {
-                  Write-Error "Error JSON file not generated at $(ERROR_JSON_PATH)"
-                  exit 1
-              }
-              Get-Content $(ERROR_JSON_PATH) -Tail 100
-            displayName: "Run Playwright Test and Generate Error Logs"
-
-          - task: AzureCLI@2
-            displayName: "Run Self-Healing Script"
+          - task: PowerShell@2
+            displayName: "Run Playwright E2E and Self-Heal Bash Script"
             inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: ps
-              scriptLocation: inlineScript
-              inlineScript: |
-                Write-Host "Running self-healing script..."
-                $failingScriptPath = "$(Build.SourcesDirectory)/$(TEST_SCRIPT_PATH)"
-                $errorJsonPath = "$(Build.SourcesDirectory)/$(ERROR_JSON_PATH)"
-                if (-not (Test-Path $failingScriptPath)) {
-                    Write-Error "Failing test script not found at $failingScriptPath"
-                    exit 1
+              targetType: "inline"
+              script: |
+                Write-Host "Ensuring Chocolatey is installed..."
+                if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+                    Write-Host "Installing Chocolatey..."
+                    Set-ExecutionPolicy Bypass -Scope Process -Force
+                    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+                    iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
                 }
-                if (-not (Test-Path $errorJsonPath)) {
-                    Write-Error "Error JSON file not found at $errorJsonPath"
-                    exit 1
+
+                Write-Host "Ensuring Git Bash is installed..."
+                if (-not (Test-Path "C:\Program Files\Git\bin\bash.exe")) {
+                    Write-Host "Installing Git Bash via Chocolatey..."
+                    choco install git -y --no-progress
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Failed to install Git Bash"
+                        exit 1
+                    }
                 }
-                python scripts/e2e-test-generator/self_heal.py --script "$failingScriptPath" --error "$errorJsonPath"
+
+                Write-Host "Ensuring jq is installed..."
+                if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
+                    Write-Host "Installing jq via Chocolatey..."
+                    choco install jq -y --no-progress
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Failed to install jq"
+                        exit 1
+                    }
+                }
+
+                Write-Host "Setting npm loglevel to error..."
+                & npm config set loglevel error
+
+                Write-Host "Making run_e2e_and_heal.sh executable..."
+                & "C:\Program Files\Git\bin\bash.exe" -c "chmod +x scripts/e2e-test-generator/run_e2e_and_heal.sh"
+
+                Write-Host "Running E2E and self-heal script..."
+                $env:AZURE_OPENAI_TESTMENT = "$(AZURE_OPENAI_ENDPOINT)"
+                $env:AZURE_OPENAI_TEST_KEY = "$(AZURE_OPENAI_API_KEY)"
+                & "C:\Program Files\Git\bin\bash.exe" -c "./scripts/e2e-test-generator/run_e2e_and_heal.sh"
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Self-healing script failed. Aborting task."
-                    exit 1
+                    Write-Host "Bash script encountered errors, but continuing pipeline due to self-healing intent"
                 }
-                Write-Host "Self-healing script completed successfully."
+            continueOnError: true
             env:
               AZURE_OPENAI_ENDPOINT: $(AZURE_OPENAI_ENDPOINT)
               AZURE_OPENAI_API_KEY: $(AZURE_OPENAI_API_KEY)
@@ -186,7 +210,7 @@ stages:
               git checkout -b $(NEW_BRANCH_NAME)
 
               Write-Host "Adding healed tests..."
-              git add healed_tests/
+              git add healed_tests/ playwright-results/
 
               Write-Host "Checking for changes..."
               $changes = git status --porcelain
@@ -207,7 +231,7 @@ stages:
           - powershell: |
               Write-Host "Creating new PR for self-healed tests..."
               $prTitle = "Self-Healed Tests for Build #$(Build.BuildId)"
-              $prDescription = "This PR contains self-healed Playwright tests generated for build #$(Build.BuildId). Please review the healed tests for accuracy and stability."
+              $prDescription = "This PR contains self-healed Playwright tests generated for build #$(Build.BuildId). Please review the healed tests for accuracy and stability. The self healed tests are saved in the 'healed_tests' directory for review"
 
               az repos pr create `
                 --repository workspace-portal `

@@ -51,12 +51,12 @@ async def generate_playwright_script(user_task: str) -> str:
     # Initialize LLM
     try:
         llm = AzureChatOpenAI(
-            model="gpt-4o",
-            azure_deployment="gpt-4o",
-            api_version="2023-07-01-preview",
+            model="gpt-4.1",
+            azure_deployment="gpt-4.1",
+            api_version="2024-12-01-preview",
             azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
             api_key=SecretStr(os.getenv('AZURE_OPENAI_API_KEY', '')),
-            temperature=0,
+            temperature=0.1,
         )
     except Exception as e:
         logging.error(f"Error initializing AzureChatOpenAI: {e}")
@@ -67,7 +67,7 @@ async def generate_playwright_script(user_task: str) -> str:
 
     # System prompt for Playwright MCP server navigation and script generation
     system_prompt = """
-You are a Playwright test automation expert for the Azure AI Studio workspace-portal application at https://ai.azure.com?auth=local. Use the Playwright MCP server to perform browser navigation according to the provided user instructions. After completing the navigation and actions, generate a Playwright test script in TypeScript that replicates the actions taken. The script must follow Playwright's best practices, including:
+You are a Playwright test automation expert for the Azure AI Studio workspace-portal application at https://ai.azure.com/foundryProject/overview?wsid=/subscriptions/696debc0-8b66-4d84-87b1-39f43917d76c/resourceGroups/rg-t-schanda-8629/providers/Microsoft.CognitiveServices/accounts/playwright-pj-resource/projects/playwright_pj&tid=72f988bf-86f1-41af-91ab-2d7cd011db47. Use the Playwright MCP server to perform browser navigation according to the provided user instructions. After completing the navigation and actions, generate a Playwright test script in TypeScript that replicates the actions taken. The script must follow Playwright's best practices, including:
 - Use async syntax for all operations.
 - Import { test, expect } from '@playwright/test'.
 - Use robust locators (e.g., getByRole, getByText).

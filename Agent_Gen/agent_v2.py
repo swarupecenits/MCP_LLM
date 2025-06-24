@@ -30,6 +30,7 @@ async def generate_playwright_script(user_task: str) -> str:
     """Generate a Playwright TypeScript test script based on the user task using MCP server navigation."""
     # Load environment variables
     load_dotenv()
+    
 
     # Load MCP Client from config
     try:
@@ -44,12 +45,12 @@ async def generate_playwright_script(user_task: str) -> str:
     # Initialize LLM
     try:
         llm = AzureChatOpenAI(
-            model="gpt-4o",
-            azure_deployment="gpt-4o",
-            api_version="2023-07-01-preview",
+            model="gpt-4.1",
+            azure_deployment="gpt-4.1",
+            api_version="2024-12-01-preview",
             azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
             api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
-            temperature=0,
+            temperature=0.2,
         )
     except Exception as e:
         print(f"Error initializing AzureChatOpenAI: {e}")

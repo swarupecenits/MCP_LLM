@@ -1,0 +1,5 @@
+{
+  "user_task": "\n1. Navigate to https://ai.azure.com/foundryProject/overview?wsid=/subscriptions/696debc0-8b66-4d84-87b1-39f43917d76c/resourceGroups/rg-t-schanda-8629/providers/Microsoft.CognitiveServices/accounts/playwright-pj-resource/projects/playwright_pj&tid=72f988bf-86f1-41af-91ab-2d7cd011db47.\n2. Search for Model Catalogue.\n3. Search for Azure Speech.\n4. See if the Azure AI Speech is visible or not\n4. Close the browser.\n",
+  "generated_script": null,
+  "status": "failed"
+}

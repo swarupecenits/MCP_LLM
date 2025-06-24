@@ -1,8 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { BasePage } from "../../../core/BasePage";
-import { timeouts } from "../../../core/constants";
-import { step } from "../../../core/decorators";
-import { TestData } from "../../../core/TestData";
+import { BasePage } from "../../core/BasePage";
+import { timeouts } from "../../core/constants";
+import { step } from "../../core/decorators";
+import { TestData } from "../../core/TestData";
 
 export class FineTuneModelFlowPage extends BasePage {
   public page: Page;

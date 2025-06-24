@@ -10,9 +10,7 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {
-      "actualWorkers": 1
-    },
+    "metadata": {},
     "preserveOutput": "always",
     "reporter": [
       [
@@ -49,9 +47,7 @@
         "outputDir": "C:/Users/t-schanda/Documents/MCP_LLM/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "chromium",
         "name": "chromium",
         "testDir": "C:/Users/t-schanda/Documents/MCP_LLM/tests",
@@ -69,55 +65,17 @@
     "workers": 1,
     "webServer": null
   },
-  "suites": [
+  "suites": [],
+  "errors": [
     {
-      "title": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
-      "file": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [
-        {
-          "title": "Azure AI Foundry Language Playground navigation",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "chromium",
-              "projectName": "chromium",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 5569,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2025-06-19T14:21:57.336Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "ddf0a7c6b276b5670b01-b0d41d79ef422c115dce",
-          "file": "ai-foundry-language-playground.spec_healed_v1_1.spec.ts",
-          "line": 4,
-          "column": 5
-        }
-      ]
+      "message": "Error: Process from config.webServer was not able to start. Exit code: 1",
+      "stack": "Error: Process from config.webServer was not able to start. Exit code: 1"
     }
   ],
-  "errors": [],
   "stats": {
-    "startTime": "2025-06-19T14:21:56.043Z",
-    "duration": 6901.794000000001,
-    "expected": 1,
+    "startTime": "2025-06-21T12:54:58.490Z",
+    "duration": 404.4320000000007,
+    "expected": 0,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

@@ -1,7 +1,11 @@
 {
   "mcpServers": {
     "playwright": {
-      "url": "http://localhost:8931/sse"
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": {
+        "DISPLAY": ":1"
+      }
     }
   }
 }

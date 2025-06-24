@@ -1,6 +1,2 @@
-<testsuites id="" name="" tests="1" failures="0" skipped="0" errors="0" time="6.901794000000001">
-<testsuite name="ai-foundry-language-playground.spec_healed_v1_1.spec.ts" timestamp="2025-06-19T14:21:56.071Z" hostname="chromium" tests="1" failures="0" skipped="0" time="5.569" errors="0">
-<testcase name="Azure AI Foundry Language Playground navigation" classname="ai-foundry-language-playground.spec_healed_v1_1.spec.ts" time="5.569">
-</testcase>
-</testsuite>
+<testsuites id="" name="" tests="0" failures="0" skipped="0" errors="0" time="0.4044320000000007">
 </testsuites>
