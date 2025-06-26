@@ -1,9 +1,9 @@
 trigger: none
 
-pr:
-  branches:
-    include:
-      - e2e_test_generator
+# pr:
+#   branches:
+#     include:
+#       - e2e_test_generator
 
 pool:
   vmImage: Vienna-UX-Windows2022-E2E
@@ -29,25 +29,25 @@ stages:
               Write-Host "System.PullRequest.PullRequestId: $(System.PullRequest.PullRequestId)"
               Write-Host "System.PullRequest.SourceBranch: $(System.PullRequest.SourceBranch)"
               Write-Host "System.PullRequest.TargetBranch: $(System.PullRequest.TargetBranch)"
-            displayName: "Debug Pipeline Trigger Information"
+            displayName: "Pipeline Trigger Information"
 
-          - powershell: |
-              Write-Host "--- Identifying Build Service Identities ---"
-              $project = "$(System.TeamProject)"
-              $collectionUri = "$(System.TeamFoundationCollectionUri)"
-              $orgName = $collectionUri.Split('/')[-1]
+          # - powershell: |
+          #     Write-Host "--- Identifying Build Service Identities ---"
+          #     $project = "$(System.TeamProject)"
+          #     $collectionUri = "$(System.TeamFoundationCollectionUri)"
+          #     $orgName = $collectionUri.Split('/')[-1]
 
-              $projectBuildService = "[$project]\$project Build Service"
-              $collectionBuildServiceOrg = "Project Collection Build Service ($orgName)"
-              $collectionBuildServiceGuid = "Project Collection Build Service ($(System.CollectionId))"
+          #     $projectBuildService = "[$project]\$project Build Service"
+          #     $collectionBuildServiceOrg = "Project Collection Build Service ($orgName)"
+          #     $collectionBuildServiceGuid = "Project Collection Build Service ($(System.CollectionId))"
 
-              Write-Host "The pipeline is running in the project: $project"
-              Write-Host "Make sure one of the following build service identities has 'Contribute to pull requests' permission on the repository:"
-              Write-Host "1. PROJECT-SCOPED IDENTITY: $projectBuildService"
-              Write-Host "2. COLLECTION-SCOPED IDENTITY (search by name): $collectionBuildServiceOrg"
-              Write-Host "3. COLLECTION-SCOPED IDENTITY (search by GUID): $collectionBuildServiceGuid"
-              Write-Host "--------------------------------------------"
-            displayName: "Print Build Service Identities"
+          #     Write-Host "The pipeline is running in the project: $project"
+          #     Write-Host "Make sure one of the following build service identities has 'Contribute to pull requests' permission on the repository:"
+          #     Write-Host "1. PROJECT-SCOPED IDENTITY: $projectBuildService"
+          #     Write-Host "2. COLLECTION-SCOPED IDENTITY (search by name): $collectionBuildServiceOrg"
+          #     Write-Host "3. COLLECTION-SCOPED IDENTITY (search by GUID): $collectionBuildServiceGuid"
+          #     Write-Host "--------------------------------------------"
+          #   displayName: "Print Build Service Identities"
 
           - template: ../../apps/ai-studio/pipeline/templates/e2e-test-setup.yml
 

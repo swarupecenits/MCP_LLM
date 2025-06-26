@@ -17,6 +17,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 
+# Directory to save healed test scripts
+HEALED_TESTS_DIR = "healed_tests"
+
+# Ensure the directory for healed tests exists
+if not os.path.exists(HEALED_TESTS_DIR):
+    os.makedirs(HEALED_TESTS_DIR)
+
 def get_unique_filename(base_name: str, extension: str, directory: str) -> str:
     """Generate a unique filename by appending an incrementing number if the base name already exists."""
     counter = 1
@@ -285,25 +292,18 @@ async def main():
     healing_summary, healed_script = await heal_playwright_script(args.script, args.error)
 
     if healed_script:
-        # Overwrite the original test file with the healed script
+        # Generate a unique filename for the healed script in the 'healed_tests' directory
+        base_name = os.path.splitext(os.path.basename(args.script))[0]
+        healed_filename = f"{base_name}_healed_v1"
+        test_file_path = get_unique_filename(healed_filename, ".spec.ts", HEALED_TESTS_DIR)
+
         try:
-            with open(args.script, "w", encoding="utf-8") as f:
+            with open(test_file_path, "w", encoding="utf-8") as f:
                 f.write(healed_script)
-            logging.info(f"Healed test script written to original file: {args.script}")
-            print(f"Healed test script has been written to: {args.script}")  # Display for verification
+            logging.info(f"\nHealing successful!\nHealed test script saved to: {test_file_path}")
+            logging.info(f"\n### 🧩 Healing Summary\n{healing_summary}")
         except IOError as e:
-            logging.error(f"Error overwriting the original test script: {e}")
-
-        # Commit the change using git
-        try:
-            import subprocess
-            subprocess.run(["git", "add", args.script], check=True)
-            subprocess.run(["git", "commit", "-m", f"Heal Playwright test: {os.path.basename(args.script)}"], check=True)
-            logging.info(f"Committed healed test script: {args.script}")
-        except Exception as e:
-            logging.error(f"Error committing healed test script: {e}")
-
-        logging.info(f"\n### 🧩 Healing Summary\n{healing_summary}")
+            logging.error(f"Error saving the healed test script: {e}")
     else:
         logging.error("\nFailed to heal the test script.")
 

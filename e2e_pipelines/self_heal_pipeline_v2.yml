@@ -172,25 +172,12 @@ stages:
                     }
                 }
 
-                Write-Host "Ensuring jq is installed..."
-                if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
-                    Write-Host "Installing jq via Chocolatey..."
-                    choco install jq -y --no-progress
-                    if ($LASTEXITCODE -ne 0) {
-                        Write-Error "Failed to install jq"
-                        exit 1
-                    }
-                }
-
-                Write-Host "Setting npm loglevel to error..."
-                & npm config set loglevel error
-
                 Write-Host "Making run_e2e_and_heal.sh executable..."
                 & "C:\Program Files\Git\bin\bash.exe" -c "chmod +x scripts/e2e-test-generator/run_e2e_and_heal.sh"
 
                 Write-Host "Running E2E and self-heal script..."
-                $env:AZURE_OPENAI_TESTMENT = "$(AZURE_OPENAI_ENDPOINT)"
-                $env:AZURE_OPENAI_TEST_KEY = "$(AZURE_OPENAI_API_KEY)"
+                $env:AZURE_OPENAI_ENDPOINT = "$(AZURE_OPENAI_ENDPOINT)"
+                $env:AZURE_OPENAI_API_KEY = "$(AZURE_OPENAI_API_KEY)"
                 & "C:\Program Files\Git\bin\bash.exe" -c "./scripts/e2e-test-generator/run_e2e_and_heal.sh"
                 if ($LASTEXITCODE -ne 0) {
                     Write-Host "Bash script encountered errors, but continuing pipeline due to self-healing intent"
@@ -209,9 +196,8 @@ stages:
               Write-Host "Creating new branch: $(NEW_BRANCH_NAME)"
               git checkout -b $(NEW_BRANCH_NAME)
 
-              Write-Host "Adding healed tests to e2e Playwright tests dir..."
-              git add playwright-results/
-              git add tests-e2e-playwright/
+              Write-Host "Adding healed tests..."
+              git add healed_tests/
 
               Write-Host "Checking for changes..."
               $changes = git status --porcelain
@@ -232,7 +218,7 @@ stages:
           - powershell: |
               Write-Host "Creating new PR for self-healed tests..."
               $prTitle = "Self-Healed Tests for Build #$(Build.BuildId)"
-              $prDescription = "This PR contains self-healed Playwright tests generated for build #$(Build.BuildId). Please review the healed tests for accuracy and stability. The self healed tests are saved in the 'healed_tests' directory for review"
+              $prDescription = "This PR contains self-healed Playwright tests generated for build #$(Build.BuildId). Please review the healed tests for accuracy and stability."
 
               az repos pr create `
                 --repository workspace-portal `

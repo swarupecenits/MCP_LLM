@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import argparse
+import chardet
 import re
 import sys
 from dotenv import load_dotenv
@@ -12,10 +13,17 @@ from pydantic import SecretStr
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,  # Set to DEBUG for detailed error logging
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
+
+# Directory to save healed test scripts
+HEALED_TESTS_DIR = "healed_tests"
+
+# Ensure the directory for healed tests exists
+if not os.path.exists(HEALED_TESTS_DIR):
+    os.makedirs(HEALED_TESTS_DIR)
 
 def get_unique_filename(base_name: str, extension: str, directory: str) -> str:
     """Generate a unique filename by appending an incrementing number if the base name already exists."""
@@ -53,46 +61,56 @@ async def heal_playwright_script(failing_script_path: str, error_json_path: str)
         logging.error(f"Error reading failing script: {e}")
         return "", ""
 
-    # Read error.json
+    # Detect encoding of error.json using chardet
     try:
         with open(error_json_path, "rb") as f:
             raw_data = f.read()
         if not raw_data:
             logging.error(f"{error_json_path} is empty")
             return "", ""
-        # Try decoding with common encodings
-        encodings_to_try = ['utf-8', 'utf-8-sig', 'latin1']
-        error_details = None
-        for encoding in encodings_to_try:
-            try:
-                decoded_data = raw_data.decode(encoding)
-                error_details = json.loads(decoded_data)
-                logging.info(f"Successfully parsed {error_json_path} as JSON using {encoding} encoding")
-                break
-            except UnicodeDecodeError as e:
-                logging.warning(f"Failed to decode {error_json_path} with {encoding}: {e}")
-                continue
-            except json.JSONDecodeError as e:
-                logging.error(f"Invalid JSON in {error_json_path} with {encoding}: {e}")
-                snippet = decoded_data[:100].replace('\n', '\\n') if 'decoded_data' in locals() else "N/A"
-                hex_bytes = raw_data[:16].hex()
-                logging.error(f"File snippet (first 100 chars): {snippet}")
-                logging.error(f"First 16 bytes (hex): {hex_bytes}")
-                logging.error(f"Full file content:\n{raw_data.decode(encoding, errors='replace')}")
-                logging.error(f"Please verify {error_json_path} is valid JSON. Try opening in a text editor or running 'cat {error_json_path}'.")
-                continue
-            except Exception as e:
-                logging.error(f"Error parsing {error_json_path} with {encoding}: {e}")
-                continue
-
-        if error_details is None:
-            logging.error(f"Failed to parse {error_json_path} as JSON with any encoding (tried: {', '.join(encodings_to_try)})")
-            return "", ""
+        result = chardet.detect(raw_data)
+        detected_encoding = result['encoding']
+        confidence = result['confidence']
+        logging.info(f"Detected encoding for {error_json_path}: {detected_encoding} (confidence: {confidence:.2f})")
+        if detected_encoding is None:
+            logging.warning(f"chardet could not detect encoding for {error_json_path}")
+            detected_encoding = 'utf-8'  # Fallback to UTF-8
+        if confidence < 0.7:
+            logging.warning(f"Low confidence ({confidence:.2f}) in detected encoding {detected_encoding} for {error_json_path}")
     except FileNotFoundError:
         logging.error(f"Result JSON not found at {error_json_path}")
         return "", ""
     except Exception as e:
-        logging.error(f"Error reading {error_json_path}: {e}")
+        logging.error(f"Error reading {error_json_path} in binary mode: {e}")
+        return "", ""
+
+    # Read error.json with detected encoding or fallbacks
+    error_details = None
+    encodings_to_try = [detected_encoding] if detected_encoding else ['utf-8']
+    encodings_to_try.extend(['utf-8-sig', 'latin1'])  # Additional fallbacks
+    for encoding in encodings_to_try:
+        try:
+            decoded_data = raw_data.decode(encoding)
+            error_details = json.loads(decoded_data)
+            logging.info(f"Successfully parsed {error_json_path} as JSON using {encoding} encoding")
+            break
+        except UnicodeDecodeError as e:
+            logging.warning(f"Failed to decode {error_json_path} with {encoding}: {e}")
+            continue
+        except json.JSONDecodeError as e:
+            logging.error(f"Invalid JSON in {error_json_path} with {encoding}: {e}")
+            snippet = decoded_data[:100].replace('\n', '\\n') if 'decoded_data' in locals() else "N/A"
+            hex_bytes = raw_data[:16].hex() if raw_data else "N/A"
+            logging.error(f"File snippet (first 100 chars): {snippet}")
+            logging.error(f"First 16 bytes (hex): {hex_bytes}")
+            logging.error(f"Please verify {error_json_path} is valid JSON. Try opening in a text editor or running 'head {error_json_path}'.")
+            continue
+        except Exception as e:
+            logging.error(f"Error parsing {error_json_path} with {encoding}: {e}")
+            continue
+
+    if error_details is None:
+        logging.error(f"Failed to parse {error_json_path} as JSON with any encoding (tried: {', '.join(encodings_to_try)})")
         return "", ""
 
     # Extract specific error details
@@ -103,12 +121,14 @@ async def heal_playwright_script(failing_script_path: str, error_json_path: str)
         "line_number": None
     }
     has_errors = False
-
-    def check_suites(suites):
-        """Recursively check suites and their nested suites for test failures."""
-        nonlocal has_errors, error_context
-        for suite in suites:
-            # Check specs in the current suite
+    if error_details.get('errors', []):
+        error_context["type"] = "GlobalError"
+        error_context["message"] = error_details['errors'][0].get('message', '')
+        error_context["line_number"] = error_details['errors'][0].get('location', {}).get('line')
+        logging.info(f"Global errors found in {error_json_path}: {len(error_details['errors'])} error(s)")
+        has_errors = True
+    elif error_details.get('suites', []):
+        for suite in error_details['suites']:
             for spec in suite.get('specs', []):
                 for test in spec.get('tests', []):
                     for result in test.get('results', []):
@@ -119,25 +139,13 @@ async def heal_playwright_script(failing_script_path: str, error_json_path: str)
                             selector_match = re.search(r'locator\(["\'](.+?)["\']\)', error_context["message"])
                             if selector_match:
                                 error_context["selector"] = selector_match.group(1)
-                            error_context["line_number"] = result.get('errorLocation', {}).get('line')
                             logging.info(f"Test failure found in {error_json_path}: {result.get('status')} for test '{spec.get('title')}'")
                             has_errors = True
-                            return  # Exit after finding the first error
-            # Recursively check nested suites
-            if suite.get('suites', []):
-                check_suites(suite['suites'])
-
-    # Check for global errors
-    if error_details.get('errors', []):
-        error_context["type"] = "GlobalError"
-        error_context["message"] = error_details['errors'][0].get('message', '')
-        error_context["line_number"] = error_details['errors'][0].get('location', {}).get('line')
-        logging.info(f"Global errors found in {error_json_path}: {len(error_details['errors'])} error(s)")
-        has_errors = True
-    # Check suites recursively
-    elif error_details.get('suites', []):
-        check_suites(error_details['suites'])
-    # Check for unexpected failures in stats
+                            break
+                    if has_errors:
+                        break
+                if has_errors:
+                    break
     elif error_details.get('stats', {}).get('unexpected', 0) > 0:
         error_context["type"] = "UnexpectedFailure"
         error_context["message"] = f"{error_details['stats']['unexpected']} unexpected test failures"
@@ -198,7 +206,6 @@ Your process must be:
 3. **Heal**: Modify *only the broken parts* of the script to fix the failure. Preserve all other working logic. Apply these strategies:
    - For timeout errors, increase the timeout (e.g., to 30000ms) or add `waitFor` conditions.
    - For missing selectors, replace with robust locators based on DOM inspection.
-   - For invalid URL errors, correct the URL construction or ensure the base URL is properly set.
    - For flaky tests, add retry logic (e.g., `page.waitForTimeout(1000)` or polling).
    - Ensure strict mode compliance (unique element matches).
 4. **Validate**: Ensure the healed script uses robust locators. Warn if CSS/XPath is used excessively.
@@ -285,25 +292,18 @@ async def main():
     healing_summary, healed_script = await heal_playwright_script(args.script, args.error)
 
     if healed_script:
-        # Overwrite the original test file with the healed script
+        # Generate a unique filename for the healed script in the 'healed_tests' directory
+        base_name = os.path.splitext(os.path.basename(args.script))[0]
+        healed_filename = f"{base_name}_healed_v1"
+        test_file_path = get_unique_filename(healed_filename, ".spec.ts", HEALED_TESTS_DIR)
+
         try:
-            with open(args.script, "w", encoding="utf-8") as f:
+            with open(test_file_path, "w", encoding="utf-8") as f:
                 f.write(healed_script)
-            logging.info(f"Healed test script written to original file: {args.script}")
-            print(f"Healed test script has been written to: {args.script}")  # Display for verification
+            logging.info(f"\nHealing successful!\nHealed test script saved to: {test_file_path}")
+            logging.info(f"\n### 🧩 Healing Summary\n{healing_summary}")
         except IOError as e:
-            logging.error(f"Error overwriting the original test script: {e}")
-
-        # Commit the change using git
-        try:
-            import subprocess
-            subprocess.run(["git", "add", args.script], check=True)
-            subprocess.run(["git", "commit", "-m", f"Heal Playwright test: {os.path.basename(args.script)}"], check=True)
-            logging.info(f"Committed healed test script: {args.script}")
-        except Exception as e:
-            logging.error(f"Error committing healed test script: {e}")
-
-        logging.info(f"\n### 🧩 Healing Summary\n{healing_summary}")
+            logging.error(f"Error saving the healed test script: {e}")
     else:
         logging.error("\nFailed to heal the test script.")
 

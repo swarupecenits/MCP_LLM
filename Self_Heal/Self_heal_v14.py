@@ -150,7 +150,7 @@ async def heal_playwright_script(failing_script_path: str, error_json_path: str)
 
     # Load MCP Client from config
     try:
-        client = MCPClient.from_config_file("scripts/e2e-test-generator/playwright_mcp.json")
+        client = MCPClient.from_config_file("playwright_mcp.json")
         logging.info("Connected to MCP server successfully")
     except FileNotFoundError:
         logging.error("playwright_mcp.json not found. Please ensure the MCP server config is present.")
